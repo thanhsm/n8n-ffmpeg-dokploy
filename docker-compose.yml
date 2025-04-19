@@ -1,27 +1,66 @@
-version: "3"
+version: '3.8'
 
-services:
-  next-app:
-    build:
-      context: ./next-app
-      dockerfile: prod.Dockerfile
-      args:
-        ENV_VARIABLE: ${ENV_VARIABLE}
-        NEXT_PUBLIC_ENV_VARIABLE: ${NEXT_PUBLIC_ENV_VARIABLE}
-    restart: always
-    ports:
-      - 3000
-    networks:
-      - dokploy-network
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.next-app.rule=Host(`next-app.dokploy.com`)
-      - traefik.http.routers.next-app.entrypoints=websecure
-      - traefik.http.routers.next-app.tls.certResolver=letsencrypt
-      - traefik.http.services.next-app.loadbalancer.server.port=3000
-  # Add more containers below (nginx, postgres, etc.)
-# Define a network, which allows containers to communicate
-# with each other, by using their container name as a hostname
+volumes:
+  n8n_storage:
+  redis_storage:
+
 networks:
   dokploy-network:
     external: true
+
+x-shared: &shared
+  restart: always
+  build:
+    context: .
+    dockerfile: Dockerfile
+  environment:
+    - N8N_SECURE_COOKIE=false
+    - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+    - N8N_HOST=${N8N_HOST}
+    - N8N_PORT=${N8N_PORT}
+    - N8N_PROTOCOL=https
+    - NODE_ENV=production
+    - WEBHOOK_URL=https://${N8N_HOST}/
+    - DB_TYPE=postgresdb
+    - DB_POSTGRESDB_HOST=${DB_POSTGRESDB_HOST}
+    - DB_POSTGRESDB_PORT=5432
+    - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+    - DB_POSTGRESDB_USER=${POSTGRES_USER}
+    - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+    - EXECUTIONS_MODE=queue
+    - QUEUE_BULL_REDIS_HOST=redis
+    - QUEUE_HEALTH_CHECK_ACTIVE=true
+    - N8N_ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    - N8N_DIAGNOSTICS_ENABLED=false
+    - N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE=true
+    - N8N_DEFAULT_LOAD_ALL_NODES=false
+  links:
+    - redis
+  volumes:
+    - n8n_storage:/home/node/.n8n
+  depends_on:
+    redis:
+      condition: service_healthy
+  networks:
+      - dokploy-network
+services:
+  redis:
+    image: redis:6-alpine
+    restart: always
+    volumes:
+      - redis_storage:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  n8n:
+    <<: *shared
+
+  n8n-worker:
+    <<: *shared
+    command: worker
+    depends_on:
+      - n8n
+      
