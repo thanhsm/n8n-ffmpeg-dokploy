@@ -63,13 +63,3 @@ jobs:
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Make GHCR image public
-        run: |
-          IMAGE_ID="ghcr.io/${{ github.repository }}"
-          IMAGE_ID_LOWER=$(echo "$IMAGE_ID" | tr '[:upper:]' '[:lower:]')
-          PACKAGE_NAME=$(basename "$IMAGE_ID_LOWER")
-
-          gh api -X PATCH /user/packages/container/$PACKAGE_NAME/visibility \
-            -f visibility=public
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
